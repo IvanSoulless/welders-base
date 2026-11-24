@@ -486,7 +486,7 @@
   const I18N = {
     ru: {
       title: 'База клейм сварщиков',
-      uploadBtn: '📁 Своя папка',
+      uploadBtn: '📁 Добавить свою папку',
       removeBg: 'Вырезать белый фон (прозрачный PNG)',
       whiteThreshold: 'Порог белого:',
       onlyBlue: 'Оставить только синие чернила (убрать чёрные рамки)',
@@ -495,9 +495,9 @@
       initMem: 'Загрузка базы...',
       emptyDb: 'База пуста. Выбери папку с файлами «Клеймо - ФИО.png»',
       serverLoaded: (n) => `Общая база сайта: ${n} сварщиков`,
-      inMemory: (n, dt) => `Локальная копия в памяти: ${n} сварщиков${dt ? ` (от ${dt})` : ''}`,
-      savedToMem: (n) => `Сохранено локально: ${n} сварщиков`,
-      resetServer: 'Вернуть общую базу сайта',
+      inMemory: (n, dt) => `Объединённая база в памяти: ${n} сварщиков${dt ? ` (от ${dt})` : ''}`,
+      savedToMem: (n) => `Объединено и сохранено локально: ${n} сварщиков`,
+      resetServer: 'Вернуть исходную базу сайта',
       noValidFiles: 'Не найдено ни одного корректного файла',
       errToggle: (n) => `⚠️ Ошибки в именах (${n})`,
       errBoxTitle: 'Проблемные файлы (проверь имена):',
@@ -522,7 +522,7 @@
     },
     en: {
       title: 'Welder Stamp Database',
-      uploadBtn: '📁 Custom Folder',
+      uploadBtn: '📁 Add Custom Folder',
       removeBg: 'Remove white background (transparent PNG)',
       whiteThreshold: 'White threshold:',
       onlyBlue: 'Keep blue ink only (remove black table borders)',
@@ -531,9 +531,9 @@
       initMem: 'Loading database...',
       emptyDb: 'Database is empty. Select a folder with "Stamp - Full Name.png" files',
       serverLoaded: (n) => `Site database loaded: ${n} welders`,
-      inMemory: (n, dt) => `Local copy in browser: ${n} welders${dt ? ` (${dt})` : ''}`,
-      savedToMem: (n) => `Saved locally: ${n} welders`,
-      resetServer: 'Restore site database',
+      inMemory: (n, dt) => `Merged database in browser: ${n} welders${dt ? ` (${dt})` : ''}`,
+      savedToMem: (n) => `Merged and saved locally: ${n} welders`,
+      resetServer: 'Restore original site database',
       noValidFiles: 'No valid image files found',
       errToggle: (n) => `⚠️ Filename errors (${n})`,
       errBoxTitle: 'Problematic files (check filenames):',
@@ -558,7 +558,7 @@
     },
     tr: {
       title: 'Kaynakçı Damga Veritabanı',
-      uploadBtn: '📁 Özel Klasör',
+      uploadBtn: '📁 Özel Klasör Ekle',
       removeBg: 'Beyaz arka planı kaldır (şeffaf PNG)',
       whiteThreshold: 'Beyaz eşiği:',
       onlyBlue: 'Sadece mavi mürekkebi tut (siyah çizgileri sil)',
@@ -567,9 +567,9 @@
       initMem: 'Veritabanı yükleniyor...',
       emptyDb: 'Veritabanı boş. "Damga - Ad Soyad.png" dosyalarını içeren klasörü seçin',
       serverLoaded: (n) => `Site veritabanı yüklendi: ${n} kaynakçı`,
-      inMemory: (n, dt) => `Tarayıcıdaki yerel kopya: ${n} kaynakçı${dt ? ` (${dt})` : ''}`,
-      savedToMem: (n) => `Yerel olarak kaydedildi: ${n} kaynakçı`,
-      resetServer: 'Site veritabanına dön',
+      inMemory: (n, dt) => `Birleştirilmiş yerel veritabanı: ${n} kaynakçı${dt ? ` (${dt})` : ''}`,
+      savedToMem: (n) => `Birleştirildi ve kaydedildi: ${n} kaynakçı`,
+      resetServer: 'Orijinal site veritabanına dön',
       noValidFiles: 'Geçerli resim dosyası bulunamadı',
       errToggle: (n) => `⚠️ Dosya adı hataları (${n})`,
       errBoxTitle: 'Hatalı dosyalar (isimleri kontrol edin):',
@@ -640,7 +640,7 @@
   // --- IndexedDB ---
   const DB_NAME = 'WeldersBaseDB';
   const STORE_NAME = 'welders';
-  let weldersList = []; // [{ stamp, fio, blob?, url? }]
+  let weldersList = [];
   let activeSugIndex = -1;
 
   function openIDB() {
@@ -697,7 +697,6 @@
     });
   }
 
-  // --- Загрузка общей базы с сервера (db.json + папка signatures/) ---
   async function tryLoadServerDB() {
     try {
       const res = await fetch('db.json?t=' + Date.now());
@@ -759,10 +758,8 @@
 
   window.addEventListener('DOMContentLoaded', async () => {
     setLanguage(currentLang);
-    // Проверяем, есть ли на хостинге db.json
     const serverOk = await tryLoadServerDB();
 
-    // Если пользователь ранее загружал свою папку или подрезал подписи локально
     try {
       const { records, meta } = await loadFromIDB();
       if (records.length > 0) {
@@ -783,13 +780,17 @@
     }
   });
 
+  // --- Объединение: общая база сайта + своя папка ---
   document.getElementById('folderInput').addEventListener('change', async function(e) {
     const files = Array.from(e.target.files);
     if (!files.length) return;
 
-    const records = [];
+    const mergedMap = new Map();
+    weldersList.forEach(item => mergedMap.set(item.stamp, item));
+
     const errors = [];
-    const seenStamps = new Map();
+    const seenInFolder = new Set();
+    let addedOrUpdated = 0;
 
     for (const file of files) {
       if (file.name.startsWith('.')) continue;
@@ -814,22 +815,24 @@
         continue;
       }
 
-      if (seenStamps.has(stamp)) {
-        errors.push({ code: 'dup', stamp, f1: file.name, f2: seenStamps.get(stamp) });
+      if (seenInFolder.has(stamp)) {
+        errors.push({ code: 'dup', stamp, f1: file.name, f2: stamp });
       } else {
-        seenStamps.set(stamp, file.name);
+        seenInFolder.add(stamp);
       }
 
-      records.push({ stamp, fio, blob: file });
+      mergedMap.set(stamp, { stamp, fio, blob: file });
+      addedOrUpdated++;
     }
 
+    const records = Array.from(mergedMap.values());
     records.sort((a, b) => a.stamp.localeCompare(b.stamp, 'ru'));
     weldersList = records;
 
     await saveToIDB(records, errors);
     renderErrors(errors);
 
-    if (records.length > 0) {
+    if (addedOrUpdated > 0) {
       lastStatusState = { type: 'saved', count: records.length };
       enableSearch();
       if (hasServerDB) document.getElementById('resetToServerBtn').style.display = 'inline';
@@ -879,18 +882,16 @@
     box.style.display = box.style.display === 'block' ? 'none' : 'block';
   });
 
-  // --- Получение Blob из записи (поддержка и локальных файлов, и URL с GitHub Pages) ---
   async function getWelderBlob(w) {
     if (w.blob) return w.blob;
     if (w.url) {
       const res = await fetch(w.url);
-      w.blob = await res.blob(); // Кэшируем в оперативке
+      w.blob = await res.blob();
       return w.blob;
     }
     return null;
   }
 
-  // --- Очистка изображения ---
   async function processSignatureImage(welder, removeBg, threshold, onlyBlue, blueMinDiff) {
     const blob = await getWelderBlob(welder);
     if (!blob) return '';
@@ -970,7 +971,6 @@
     return trimmed.toDataURL('image/png');
   }
 
-  // --- События ползунков ---
   const removeBgCheck = document.getElementById('removeBgCheck');
   const bgThreshold = document.getElementById('bgThreshold');
   const onlyBlueCheck = document.getElementById('onlyBlueCheck');
@@ -993,7 +993,6 @@
     handleSearchInput();
   });
 
-  // --- Поиск и подсказки ---
   const searchInput = document.getElementById('searchInput');
   const sugBox = document.getElementById('suggestionsBox');
 
@@ -1155,7 +1154,6 @@
     container.innerHTML = cardsHtml.join('');
   }
 
-  // --- Увеличение ---
   let currentZoom = 1;
   let currentZoomImgId = null;
 
@@ -1201,7 +1199,6 @@
     if (currentZoomImgId) copyPng(currentZoomImgId);
   }
 
-  // --- Ручное кадрирование ---
   let cropTargetStamp = null;
   let cropOrigImg = null;
   let isDragging = false, startX = 0, startY = 0, curX = 0, curY = 0;
@@ -1284,7 +1281,6 @@
       const idx = weldersList.findIndex(item => item.stamp === cropTargetStamp);
       if (idx !== -1) {
         weldersList[idx].blob = newBlob;
-        // Сохраняем локально изменения
         await saveToIDB(weldersList, currentErrorsList);
         if (hasServerDB) document.getElementById('resetToServerBtn').style.display = 'inline';
         handleSearchInput();
