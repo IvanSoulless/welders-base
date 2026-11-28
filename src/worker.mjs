@@ -111,9 +111,8 @@ async function route(request, env) {
     return Response.json({ role: session.role }, { headers: session.persistent ? { 'Set-Cookie': cookieValue(token, age) } : {} });
   }
   if (method === 'GET' && path === '/api/catalog') {
-    const object = await env.PRIVATE.get('db.json');
-    return object ? new Response(object.body, { headers: { 'Content-Type': 'application/json', ETag: object.httpEtag } })
-      : Response.json([], { headers: { ETag: '"empty"' } });
+    const catalog = await env.DB.prepare('SELECT version, keys FROM catalog WHERE id=1').first();
+    return new Response(catalog.keys, { headers: { 'Content-Type': 'application/json', ETag: JSON.stringify(catalog.version) } });
   }
   if (method === 'POST' && path === '/api/admin/revoke') {
     if (session.role !== 'admin') return error(403, 'Admin required');
@@ -125,16 +124,18 @@ async function route(request, env) {
     try { key = decodeURIComponent(path.slice('/api/signature/'.length)); } catch { return error(400, 'Invalid key'); }
     if (!imageKey.test(key)) return error(404, 'Unknown signature');
     if (method === 'GET') {
-      const object = await env.PRIVATE.get('signatures/' + key);
-      return object ? new Response(object.body, { headers: { 'Content-Type': 'image/png' } }) : error(404, 'Unknown signature');
+      const image = await env.DB.prepare('SELECT image FROM signatures WHERE key=?').bind(key).first('image');
+      return image ? new Response(Uint8Array.from(image), { headers: { 'Content-Type': 'image/png' } })
+        : error(404, 'Unknown signature');
     }
     if (method === 'PUT') {
       if (session.role !== 'admin') return error(403, 'Admin required');
       if (!key.includes('/')) return error(400, 'Use a versioned key');
-      const data = await readLimited(request, 5 * 1024 * 1024);
+      const data = await readLimited(request, 1_900_000);
       if (!data || data.length < 24 || hex(data.slice(0, 8)) !== '89504e470d0a1a0a') return error(400, 'Invalid PNG');
-      const object = await env.PRIVATE.put('signatures/' + key, data, { onlyIf: { etagDoesNotMatch: '*' } });
-      return object ? new Response(null, { status: 204 }) : error(409, 'Signature key already exists');
+      const result = await env.DB.prepare('INSERT INTO signatures (key,image) VALUES (?,?) ON CONFLICT(key) DO NOTHING')
+        .bind(key, data.buffer).run();
+      return result.meta.changes ? new Response(null, { status: 204 }) : error(409, 'Signature key already exists');
     }
   }
   if (method === 'PUT' && path === '/api/catalog') {
@@ -142,16 +143,14 @@ async function route(request, env) {
     const list = await readJson(request, 1024 * 1024);
     const expected = request.headers.get('If-Match');
     if (!Array.isArray(list) || list.length > 5000 || new Set(list).size !== list.length ||
-      !list.every(key => typeof key === 'string' && imageKey.test(key)) || !expected) return error(400, 'Invalid catalog');
-    // Verify referenced objects in bounded batches before making the catalog visible.
-    for (let i = 0; i < list.length; i += 20) {
-      const objects = await Promise.all(list.slice(i, i + 20).map(key => env.PRIVATE.head('signatures/' + key)));
-      if (objects.some(object => !object)) return error(400, 'Missing signature');
-    }
-    const result = await env.PRIVATE.put('db.json', JSON.stringify(list), {
-      onlyIf: expected === '"empty"' ? { etagDoesNotMatch: '*' } : { etagMatches: expected.replace(/^"|"$/g, '') }
-    });
-    return result ? new Response(null, { status: 204 }) : error(409, 'Catalog changed. Refresh and retry.');
+      !list.every(key => typeof key === 'string' && imageKey.test(key)) || !/^"(?:empty|[a-f0-9-]{36})"$/.test(expected || '')) return error(400, 'Invalid catalog');
+    const keys = JSON.stringify(list);
+    // Check membership and replace the catalog in one statement, regardless of its size.
+    const result = await env.DB.prepare(
+      'UPDATE catalog SET keys=?, version=? WHERE id=1 AND version=? AND NOT EXISTS (' +
+        'SELECT 1 FROM json_each(?) AS entry LEFT JOIN signatures ON signatures.key=entry.value WHERE signatures.key IS NULL)'
+    ).bind(keys, crypto.randomUUID(), expected.slice(1, -1), keys).run();
+    return result.meta.changes ? new Response(null, { status: 204 }) : error(409, 'Catalog changed or a signature is missing. Refresh and retry.');
   }
   return error(404, 'Unknown endpoint');
 }

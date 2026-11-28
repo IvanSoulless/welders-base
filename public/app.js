@@ -320,8 +320,8 @@
     for (const file of files) {
       if (file.name.startsWith('.')) continue;
       const record = parseSignature(file.name);
-      if (!record || file.size > 5 * 1024 * 1024) {
-        errors.push(file.name + ' — требуется PNG до 5 МБ с именем «клеймо - ФИО.png».');
+      if (!record || file.size > 1_900_000) {
+        errors.push(file.name + ' — требуется PNG до 1,9 МБ с именем «клеймо - ФИО.png».');
         continue;
       }
       try {
@@ -810,6 +810,7 @@
       if (!newBlob || !role || counter !== syncCounter) return;
       const idx = weldersList.findIndex(item => item.stamp === stamp);
       if (idx !== -1) {
+        if (newBlob.size > 1_900_000) { showToast('Обрезанная подпись превышает 1,9 МБ.'); closeCropModal(); return; }
         localRecords.set(stamp, { ...weldersList[idx], blob: newBlob });
         applyOverlay();
         handleSearchInput();

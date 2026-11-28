@@ -14,12 +14,10 @@ test('private catalog, role enforcement, login limits and revocable sessions', a
   const state = await mkdtemp(join(tmpdir(), 'wb-'));
   const mf = new Miniflare(convertV4MiniflareOptions({
     d1Persist: state,
-    r2Persist: state,
     modules: true,
     scriptPath: 'src/worker.mjs',
     compatibilityDate: '2026-11-28',
     d1Databases: { DB: '11111111-1111-4111-8111-111111111111' },
-    r2Buckets: { PRIVATE: 'test-private' },
     bindings: { SHARED_PASSWORD: staffPassword, ADMIN_PASSWORD: adminPassword,
       SESSION_SECRET: randomBytes(32).toString('hex') }
   }));
@@ -28,8 +26,10 @@ test('private catalog, role enforcement, login limits and revocable sessions', a
     await rm(state, { recursive: true, force: true });
   });
   const db = await mf.getD1Database('DB');
-  const sql = await readFile('migrations/0001_auth.sql', 'utf8');
-  for (const line of sql.trim().split('\n')) await db.exec(line.trim());
+  for (const file of ['0001_auth.sql', '0002_catalog.sql']) {
+    const sql = await readFile('migrations/' + file, 'utf8');
+    for (const statement of sql.split(';').map(value => value.trim()).filter(Boolean)) await db.exec(statement.replaceAll('\n', ' '));
+  }
   const call = (path, options) => mf.dispatchFetch('https://welders.test' + path, options);
   const login = (role, password, extra = {}) => call('/api/login', {
     method: 'POST',
@@ -55,14 +55,19 @@ test('private catalog, role enforcement, login limits and revocable sessions', a
   const key = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/TEST1 - Test Welder.png';
   const path = '/api/signature/' + encodeURIComponent(key);
   assert.equal((await call(path)).status, 401);
-  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/FioAAAAASUVORK5CYII=', 'base64');
+  const imageHeader = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/FioAAAAASUVORK5CYII=', 'base64');
+  const png = Buffer.concat([imageHeader, randomBytes(1_850_000)]);
   assert.equal((await call(path, { method: 'PUT', headers: admin, body: png })).status, 204);
   assert.equal((await call(path, { method: 'PUT', headers: admin, body: png })).status, 409);
-  const publish = () => call('/api/catalog', { method: 'PUT', headers: { ...admin, 'If-Match': empty.headers.get('ETag') }, body: JSON.stringify([key]) });
+  const publish = (keys = [key], version = empty.headers.get('ETag')) => call('/api/catalog', { method: 'PUT', headers: { ...admin, 'If-Match': version }, body: JSON.stringify(keys) });
+  assert.equal((await publish([key + '.png'])).status, 409);
   assert.equal((await publish()).status, 204);
   assert.equal((await publish()).status, 409);
   assert.deepEqual(await (await call('/api/catalog', { headers: member })).json(), [key]);
   assert.deepEqual(Buffer.from(await (await call(path, { headers: member })).arrayBuffer()), png);
+  const current = await call('/api/catalog', { headers: member });
+  assert.equal((await publish([], current.headers.get('ETag'))).status, 204);
+  assert.deepEqual(await (await call('/api/catalog', { headers: member })).json(), []);
   const renewed = await call('/api/session?renew=1', { headers: member });
   assert.equal(renewed.status, 200);
   assert.match(renewed.headers.get('Set-Cookie'), /Max-Age=2592000/);
