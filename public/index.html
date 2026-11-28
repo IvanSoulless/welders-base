@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<title>База клейм сварщиков / Welder Stamp Database</title>
+<link rel="stylesheet" href="/app.css"><link rel="manifest" href="/manifest.webmanifest">
+</head>
+<body>
+<script defer src="/data.js"></script><script defer src="/app.js"></script>
+<section id="access"><h1>Welders Base</h1><form id="login"><label>Роль <select name="role"><option value="member">Сотрудник</option><option value="admin">Администратор</option></select></label> <label>Пароль <input name="password" type="password" required autocomplete="current-password"></label> <label><input name="remember" type="checkbox" checked> Запомнить меня</label> <button>Войти</button></form><p id="accessStatus" role="status"></p></section>
+<div id="application" hidden><nav id="account"><button id="logout">Выйти</button> <button id="refresh">Обновить общую базу</button> <button id="excel">Копировать в Excel</button> <button id="publish" hidden>Опубликовать импорт</button> <button id="revoke" hidden>Завершить все сеансы</button><p id="accountStatus" role="status"></p></nav>
+
+<div class="container">
+  <div class="header">
+    <h2 data-i18n="title">База клейм сварщиков</h2>
+    <div class="header-right">
+      <div class="lang-switch">
+        <button class="lang-btn active" data-lang="ru">RU</button>
+        <button class="lang-btn" data-lang="en">EN</button>
+        <button class="lang-btn" data-lang="tr">TR</button>
+      </div>
+      <label class="upload-btn">
+        <span data-i18n="uploadBtn">📁 Своя папка</span>
+        <input type="file" id="folderInput" webkitdirectory directory multiple>
+      </label>
+    </div>
+  </div>
+
+  <div class="controls-bar">
+    <div class="control-row">
+      <label class="toggle-label">
+        <input type="checkbox" id="removeBgCheck" checked>
+        <span data-i18n="removeBg">Вырезать белый фон (прозрачный PNG)</span>
+      </label>
+      <div class="threshold-wrap" id="thresholdWrap">
+        <span data-i18n="whiteThreshold">Порог белого:</span>
+        <input type="range" id="bgThreshold" min="170" max="250" value="225">
+        <span id="thresholdVal">225</span>
+      </div>
+    </div>
+
+    <div class="control-row">
+      <label class="toggle-label">
+        <input type="checkbox" id="onlyBlueCheck" checked>
+        <span data-i18n="onlyBlue">Оставить только синие чернила (убрать чёрные рамки)</span>
+      </label>
+      <div class="threshold-wrap" id="blueWrap">
+        <span data-i18n="blueStrength">Синева:</span>
+        <input type="range" id="blueStrength" min="5" max="60" value="18">
+        <span id="blueVal">18</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="search-wrap">
+    <input type="text" id="searchInput" data-i18n-placeholder="searchPlaceholder" placeholder="Клеймо или фамилия (можно списком: 9T47, E5L8, Иванов)..." disabled autocomplete="off">
+    <div class="suggestions" id="suggestionsBox"></div>
+  </div>
+
+  <div class="status-row">
+    <span id="statusText">Загрузка базы...</span>
+    <div class="status-actions">
+      <span class="link-action" id="resetToServerBtn" onclick="resetToServerDB()" data-i18n="resetServer">Сбросить к общей базе</span>
+      <span class="err-toggle" id="errToggle"></span>
+    </div>
+  </div>
+
+  <div class="errors-box" id="errorsBox">
+    <b data-i18n="errBoxTitle">Проблемные файлы (проверь имена):</b>
+    <ul id="errorsList"></ul>
+  </div>
+
+  <div class="empty-msg" id="emptyMsg" data-i18n="notFound">Совпадений не найдено</div>
+  <div class="results" id="resultsContainer"></div>
+</div>
+
+<!-- Окно ручной обрезки -->
+<div class="modal-backdrop" id="cropModal">
+  <div class="modal">
+    <p class="modal-title" data-i18n="cropTitle">Выдели мышкой область подписи (лишние края обрежутся и сохранятся в память)</p>
+    <div class="crop-area">
+      <canvas id="cropCanvas"></canvas>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeCropModal()" data-i18n="cancel">Отмена</button>
+      <button class="primary" onclick="applyCrop()" data-i18n="saveCrop">Сохранить обрезку</button>
+    </div>
+  </div>
+</div>
+
+<!-- Окно увеличения -->
+<div class="modal-backdrop" id="zoomModal" onclick="if(event.target===this) closeZoomModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <p class="modal-title" id="zoomTitle">Подпись</p>
+      <button onclick="closeZoomModal()">✕</button>
+    </div>
+    <div class="zoom-viewport" id="zoomViewport">
+      <img id="zoomImg" src="" alt="Zoom">
+    </div>
+    <div class="zoom-controls">
+      <div class="btn-group">
+        <button onclick="changeZoom(-0.25)">➖</button>
+        <span class="zoom-level" id="zoomLevelText">100%</span>
+        <button onclick="changeZoom(0.25)">➕</button>
+        <button onclick="resetZoom()">100%</button>
+      </div>
+      <div class="btn-group">
+        <button class="primary" onclick="copyZoomedPng()" data-i18n="copyPng">Копировать подпись (PNG)</button>
+        <button onclick="closeZoomModal()" data-i18n="close">Закрыть</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+</div></body></html>

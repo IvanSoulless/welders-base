@@ -1,0 +1,12 @@
+{
+  "name": "welders-base",
+  "private": true,
+  "scripts": {
+    "test": "node --test",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "miniflare": "5.20261127.0-beta",
+    "wrangler": "4.169.0"
+  }
+}
