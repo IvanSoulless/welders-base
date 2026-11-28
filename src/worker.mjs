@@ -42,7 +42,7 @@ async function readJson(request, limit) {
 }
 
 async function generation(env) {
-  return hash(JSON.stringify([env.SESSION_SECRET, env.SHARED_PASSWORD, env.ADMIN_PASSWORD]));
+  return hash(JSON.stringify(['admin-only', env.SESSION_SECRET, env.ADMIN_PASSWORD]));
 }
 
 async function login(request, env, now) {
@@ -60,10 +60,10 @@ async function login(request, env, now) {
     return Response.json({ error: 'Too many attempts' }, { status: 429, headers: { 'Retry-After': '60' } });
   }
   const body = await readJson(request, 4096);
-  if (!body || typeof body.password !== 'string' || !['member', 'admin'].includes(body.role)) {
+  if (!body || typeof body.password !== 'string' || body.role !== 'admin') {
     return error(400, 'Invalid login');
   }
-  const expected = body.role === 'admin' ? env.ADMIN_PASSWORD : env.SHARED_PASSWORD;
+  const expected = env.ADMIN_PASSWORD;
   const [a, b] = await Promise.all([body.password, expected].map(value => crypto.subtle.digest('SHA-256', encoder.encode(value))));
   const aa = new Uint8Array(a);
   const bb = new Uint8Array(b);
@@ -78,8 +78,8 @@ async function login(request, env, now) {
     env.DB.prepare('DELETE FROM login_attempts WHERE expires<=?').bind(now)];
   if (former) cleanup.push(env.DB.prepare('DELETE FROM sessions WHERE id=?').bind(await hash(former)));
   await env.DB.batch([...cleanup, env.DB.prepare('INSERT INTO sessions VALUES (?,?,?,?,?)')
-    .bind(await hash(token), body.role, await generation(env), now + age, Number(persistent))]);
-  return Response.json({ role: body.role }, { headers: { 'Set-Cookie': cookieValue(token, persistent ? age : null) } });
+    .bind(await hash(token), 'admin', await generation(env), now + age, Number(persistent))]);
+  return Response.json({ role: 'admin' }, { headers: { 'Set-Cookie': cookieValue(token, persistent ? age : null) } });
 }
 
 async function route(request, env) {
@@ -88,8 +88,24 @@ async function route(request, env) {
   const method = request.method;
   if (!path.startsWith('/api/')) return env.ASSETS.fetch(request);
   if (method !== 'GET' && request.headers.get('Origin') !== url.origin) return error(403, 'Invalid origin');
-  if (!env.SHARED_PASSWORD || !env.ADMIN_PASSWORD || env.SHARED_PASSWORD === env.ADMIN_PASSWORD ||
-      !env.SESSION_SECRET || env.SESSION_SECRET.length < 32) return error(503, 'Credentials not configured');
+  if (method === 'GET' && path === '/api/catalog') {
+    const catalog = await env.DB.prepare('SELECT version, keys FROM catalog WHERE id=1').first();
+    return new Response(catalog.keys, { headers: { 'Content-Type': 'application/json', ETag: JSON.stringify(catalog.version) } });
+  }
+  let key;
+  if (path.startsWith('/api/signature/')) {
+    try { key = decodeURIComponent(path.slice('/api/signature/'.length)); } catch { return error(400, 'Invalid key'); }
+    if (!imageKey.test(key)) return error(404, 'Unknown signature');
+  }
+  if (method === 'GET' && key) {
+    const image = await env.DB.prepare(
+      'SELECT image FROM signatures WHERE key=? AND EXISTS (' +
+        'SELECT 1 FROM catalog, json_each(catalog.keys) AS entry WHERE catalog.id=1 AND entry.value=signatures.key)'
+    ).bind(key).first('image');
+    return image ? new Response(Uint8Array.from(image), { headers: { 'Content-Type': 'image/png' } })
+      : error(404, 'Unknown signature');
+  }
+  if (!env.ADMIN_PASSWORD || !env.SESSION_SECRET || env.SESSION_SECRET.length < 32) return error(503, 'Admin credentials not configured');
   const now = Math.floor(Date.now() / 1000);
   if (method === 'POST' && path === '/api/login') return login(request, env, now);
   const token = request.headers.get('Cookie')?.match(/(?:^|;\s*)__Host-welders=([a-f0-9]{64})(?:;|$)/)?.[1];
@@ -99,7 +115,7 @@ async function route(request, env) {
     await env.DB.prepare('DELETE FROM sessions WHERE id=?').bind(id).run();
     return new Response(null, { status: 204, headers: { 'Set-Cookie': cookieValue('', 0) } });
   }
-  const session = await env.DB.prepare('SELECT * FROM sessions WHERE id=? AND generation=? AND expires>?')
+  const session = await env.DB.prepare("SELECT * FROM sessions WHERE id=? AND role='admin' AND generation=? AND expires>?")
     .bind(id, await generation(env), now).first();
   if (!session) return error(401, 'Sign in required');
   if (method === 'GET' && path === '/api/session') {
@@ -110,36 +126,19 @@ async function route(request, env) {
     if (!result.meta.changes) return error(401, 'Sign in required');
     return Response.json({ role: session.role }, { headers: session.persistent ? { 'Set-Cookie': cookieValue(token, age) } : {} });
   }
-  if (method === 'GET' && path === '/api/catalog') {
-    const catalog = await env.DB.prepare('SELECT version, keys FROM catalog WHERE id=1').first();
-    return new Response(catalog.keys, { headers: { 'Content-Type': 'application/json', ETag: JSON.stringify(catalog.version) } });
-  }
   if (method === 'POST' && path === '/api/admin/revoke') {
-    if (session.role !== 'admin') return error(403, 'Admin required');
     await env.DB.prepare('DELETE FROM sessions').run();
     return new Response(null, { status: 204, headers: { 'Set-Cookie': cookieValue('', 0) } });
   }
-  if (path.startsWith('/api/signature/')) {
-    let key;
-    try { key = decodeURIComponent(path.slice('/api/signature/'.length)); } catch { return error(400, 'Invalid key'); }
-    if (!imageKey.test(key)) return error(404, 'Unknown signature');
-    if (method === 'GET') {
-      const image = await env.DB.prepare('SELECT image FROM signatures WHERE key=?').bind(key).first('image');
-      return image ? new Response(Uint8Array.from(image), { headers: { 'Content-Type': 'image/png' } })
-        : error(404, 'Unknown signature');
-    }
-    if (method === 'PUT') {
-      if (session.role !== 'admin') return error(403, 'Admin required');
-      if (!key.includes('/')) return error(400, 'Use a versioned key');
-      const data = await readLimited(request, 1_900_000);
-      if (!data || data.length < 24 || hex(data.slice(0, 8)) !== '89504e470d0a1a0a') return error(400, 'Invalid PNG');
-      const result = await env.DB.prepare('INSERT INTO signatures (key,image) VALUES (?,?) ON CONFLICT(key) DO NOTHING')
-        .bind(key, data.buffer).run();
-      return result.meta.changes ? new Response(null, { status: 204 }) : error(409, 'Signature key already exists');
-    }
+  if (key && method === 'PUT') {
+    if (!key.includes('/')) return error(400, 'Use a versioned key');
+    const data = await readLimited(request, 1_900_000);
+    if (!data || data.length < 24 || hex(data.slice(0, 8)) !== '89504e470d0a1a0a') return error(400, 'Invalid PNG');
+    const result = await env.DB.prepare('INSERT INTO signatures (key,image) VALUES (?,?) ON CONFLICT(key) DO NOTHING')
+      .bind(key, data.buffer).run();
+    return result.meta.changes ? new Response(null, { status: 204 }) : error(409, 'Signature key already exists');
   }
   if (method === 'PUT' && path === '/api/catalog') {
-    if (session.role !== 'admin') return error(403, 'Admin required');
     const list = await readJson(request, 1024 * 1024);
     const expected = request.headers.get('If-Match');
     if (!Array.isArray(list) || list.length > 5000 || new Set(list).size !== list.length ||

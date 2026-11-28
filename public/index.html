@@ -13,17 +13,18 @@
         <button class="lang-btn" data-lang="en" aria-label="English">EN</button>
         <button class="lang-btn" data-lang="tr" aria-label="Türkçe">TR</button>
       </div></header>
-<section id="access"><h1>Welders Base</h1><form id="login"><label><span data-i18n="role">Роль</span> <select name="role"><option value="member" data-i18n="member">Сотрудник</option><option value="admin" data-i18n="admin">Администратор</option></select></label> <label><span data-i18n="password">Пароль</span> <input name="password" type="password" required autocomplete="current-password"></label> <label><input name="remember" type="checkbox" checked> <span data-i18n="remember">Запомнить меня</span></label> <button data-i18n="signIn">Войти</button></form><p id="accessStatus" role="status"></p></section>
-<div id="application" hidden><nav id="account"><button id="logout" data-i18n="signOut">Выйти</button> <button id="refresh" data-i18n="refresh">Обновить общую базу</button> <button id="excel" data-i18n="excel">Копировать в Excel</button> <button id="publish" data-i18n="publish" hidden>Опубликовать импорт</button> <button id="revoke" data-i18n="revoke" hidden>Завершить все сеансы</button><p id="accountStatus" role="status"></p></nav>
+<section id="access" hidden><h2 data-i18n="adminSignIn">Вход администратора</h2><form id="login"><label><span data-i18n="password">Пароль</span> <input name="password" type="password" required autocomplete="current-password"></label> <label><input name="remember" type="checkbox" checked> <span data-i18n="remember">Запомнить меня</span></label> <button data-i18n="signIn">Войти</button> <button id="cancelAdmin" type="button" data-i18n="cancel">Отмена</button></form><p id="accessStatus" role="status"></p></section>
+<div id="application"><nav id="account"><button id="showAdmin" data-i18n="adminSignIn">Вход администратора</button> <button id="logout" hidden data-i18n="signOut">Выйти</button> <button id="refresh" data-i18n="refresh">Обновить общую базу</button> <button id="excel" data-i18n="excel">Копировать в Excel</button> <button id="publish" data-i18n="publish" hidden>Опубликовать импорт</button> <button id="revoke" data-i18n="revoke" hidden>Завершить все сеансы</button><p id="accountStatus" role="status"></p></nav>
 
 <div class="container">
   <div class="header">
     <h2 data-i18n="title">База клейм сварщиков</h2>
     <div class="header-right">
       <label class="upload-btn">
-        <span data-i18n="uploadBtn">📁 Своя папка</span>
+        <span data-i18n="uploadBtn">📁 Добавить свою папку</span>
         <input type="file" id="folderInput" webkitdirectory directory multiple>
       </label>
+      <label class="upload-btn"><span data-i18n="uploadFiles">Добавить PNG</span><input type="file" id="signatureInput" accept=".png,image/png" multiple></label>
     </div>
   </div>
 

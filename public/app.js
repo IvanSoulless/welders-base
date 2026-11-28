@@ -1,6 +1,9 @@
 
   const I18N = {
     ru: {
+      adminSignIn: "Вход администратора",
+      uploadFiles: "Добавить PNG",
+      localImport: "Импорт: подписи доступны только в этой вкладке.",
       role: "Роль",
       member: "Сотрудник",
       admin: "Администратор",
@@ -67,6 +70,9 @@
       toastCropped: 'Обрезка сохранена!'
     },
     en: {
+      adminSignIn: "Admin sign-in",
+      uploadFiles: "Add PNG files",
+      localImport: "Imported signatures are available in this tab only.",
       role: "Role",
       member: "Staff",
       admin: "Administrator",
@@ -133,6 +139,9 @@
       toastCropped: 'Crop saved!'
     },
     tr: {
+      adminSignIn: "Yönetici girişi",
+      uploadFiles: "PNG dosyaları ekle",
+      localImport: "İçe aktarılan imzalar yalnızca bu sekmede kullanılabilir.",
       role: "Rol",
       member: "Çalışan",
       admin: "Yönetici",
@@ -256,7 +265,7 @@
 
   let weldersList = [];
   let activeSugIndex = -1;
-  let role;
+  let role = 'visitor';
   let sharedRecords = [];
   const localRecords = new Map();
   let revisionTag;
@@ -271,36 +280,22 @@
   const accountStatus = key => { accountMessage = key; setStatus('accountStatus', key); };
   const api = async (path, options) => {
     const res = await fetch(path, { ...options, cache: 'no-store' });
-    if (res.status === 401 && path !== '/api/login') lock('expired');
+    if (res.status === 401 && path !== '/api/login' && role === 'admin') leaveAdmin('expired');
     return res;
   };
 
-  function lock(message = '') {
-    role = null;
+  function updateAdminControls() {
+    const admin = role === 'admin';
+    for (const id of ['publish', 'revoke', 'logout']) element(id).hidden = !admin;
+    element('showAdmin').hidden = admin;
+    element('access').hidden = true;
+  }
+
+  function leaveAdmin(message = '') {
+    role = 'visitor';
     syncCounter++;
-    searchRevision++;
-    sharedRecords = [];
-    localRecords.clear();
-    weldersList = [];
-    displayedRecords = [];
-    if (typeof cropOrigImg !== 'undefined') cropOrigImg = null;
-    closeCropModal();
-    const canvas = element('cropCanvas');
-    canvas.width = canvas.width;
-    closeZoomModal();
-    currentZoomImgId = null;
-    element('toast').textContent = '';
-    accountStatus('');
-    element('zoomImg')?.removeAttribute('src');
-    element('resultsContainer').replaceChildren();
-    element('suggestionsBox').replaceChildren();
-    element('errorsList').replaceChildren();
-    currentErrorsList = [];
-    element('searchInput').value = '';
-    element('folderInput').value = '';
-    element('application').hidden = true;
-    element('access').hidden = false;
-    accessStatus(message);
+    updateAdminControls();
+    accountStatus(message);
   }
 
   function applyOverlay() {
@@ -317,8 +312,11 @@
     syncing = true;
     const counter = syncCounter;
     try {
-      const session = await api(Date.now() - lastActivity < 120_000 ? '/api/session?renew=1' : '/api/session');
-      if (!session.ok) throw new Error();
+      if (role === 'admin') {
+        const session = await api(Date.now() - lastActivity < 120_000 ? '/api/session?renew=1' : '/api/session');
+        if (!session.ok && session.status !== 401) throw new Error();
+        if (counter !== syncCounter) return;
+      }
       const res = await api('/api/catalog');
       if (!res.ok) throw new Error();
       const keys = await res.json();
@@ -326,7 +324,7 @@
       if (revisionTag !== res.headers.get('ETag')) {
         sharedRecords = keys.map(key => {
           const record = parseSignature(key);
-          return record && { ...record, url: '/api/signature/' + encodeURIComponent(key) };
+          return record && { ...record, url: '/api/signature/' + key.split('/').map(encodeURIComponent).join('/') };
         }).filter(Boolean);
         revisionTag = res.headers.get('ETag');
         applyOverlay();
@@ -341,16 +339,6 @@
     }
   }
 
-  function openAccount(session) {
-    role = session.role;
-    revisionTag = null;
-    element('publish').hidden = role !== 'admin';
-    element('revoke').hidden = role !== 'admin';
-    element('access').hidden = true;
-    element('application').hidden = false;
-    synchronize();
-  }
-
   function resetToServerDB() {
     localRecords.clear();
     renderErrors([]);
@@ -362,14 +350,25 @@
   window.addEventListener('DOMContentLoaded', async () => {
     setLanguage(currentLang);
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+    synchronize();
     try {
       const res = await fetch('/api/session', { cache: 'no-store' });
-      if (res.ok) openAccount(await res.json());
-      else if (res.status !== 401) accessStatus('unavailable');
-    } catch {
-      accessStatus('offline');
-    }
+      if (res.ok && (await res.json()).role === 'admin') {
+        role = 'admin';
+        updateAdminControls();
+      }
+    } catch { /* Public access works independently of admin login. */ }
   });
+
+  element('showAdmin').onclick = () => {
+    accessStatus('');
+    element('access').hidden = false;
+    element('login').elements.password.focus();
+  };
+  element('cancelAdmin').onclick = () => {
+    element('login').elements.password.value = '';
+    element('access').hidden = true;
+  };
 
   element('login').addEventListener('submit', async event => {
     event.preventDefault();
@@ -379,8 +378,11 @@
     button.disabled = true;
     try {
       const res = await api('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: values.get('password'), role: values.get('role'), remember: values.has('remember') }) });
-      if (res.ok) openAccount(await res.json());
+        body: JSON.stringify({ password: values.get('password'), role: 'admin', remember: values.has('remember') }) });
+      if (res.ok) {
+        role = 'admin';
+        updateAdminControls();
+      }
       else accessStatus(res.status === 429 ? 'rateLimited' : res.status === 401 ? 'badPassword' : 'unavailable');
     } catch {
       accessStatus('offline');
@@ -393,7 +395,7 @@
   async function endSession(path) {
     try {
       const res = await api(path, { method: 'POST' });
-      if (res.ok) lock();
+      if (res.ok) leaveAdmin();
       else if (role) accountStatus('logoutError');
     } catch {
       accountStatus('logoutOffline');
@@ -411,7 +413,7 @@
     if (!document.hidden) synchronize();
   }, 60_000);
 
-  element('folderInput').addEventListener('change', async event => {
+  async function importSignatures(event) {
     const input = event.currentTarget;
     const files = [...input.files];
     const counter = syncCounter;
@@ -447,7 +449,9 @@
     renderErrors(errors);
     applyOverlay();
     handleSearchInput();
-  });
+    if (records.size) accountStatus('localImport');
+  }
+  for (const id of ['folderInput', 'signatureInput']) element(id).addEventListener('change', importSignatures);
 
   element('publish').onclick = async () => {
     if (publishing || syncing || role !== 'admin' || !revisionTag || !localRecords.size) return;

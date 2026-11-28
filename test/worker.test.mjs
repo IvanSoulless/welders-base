@@ -8,8 +8,7 @@ import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 
-test('private catalog, role enforcement, login limits and revocable sessions', async t => {
-  const staffPassword = randomBytes(24).toString('hex');
+test('public catalog, private drafts, admin-only writes and revocable sessions', async t => {
   const adminPassword = randomBytes(24).toString('hex');
   const state = await mkdtemp(join(tmpdir(), 'wb-'));
   const mf = new Miniflare(convertV4MiniflareOptions({
@@ -18,7 +17,7 @@ test('private catalog, role enforcement, login limits and revocable sessions', a
     scriptPath: 'src/worker.mjs',
     compatibilityDate: '2026-11-28',
     d1Databases: { DB: '11111111-1111-4111-8111-111111111111' },
-    bindings: { SHARED_PASSWORD: staffPassword, ADMIN_PASSWORD: adminPassword,
+    bindings: { ADMIN_PASSWORD: adminPassword,
       SESSION_SECRET: randomBytes(32).toString('hex') }
   }));
   t.after(async () => {
@@ -36,47 +35,51 @@ test('private catalog, role enforcement, login limits and revocable sessions', a
     headers: { Origin: 'https://welders.test', 'Content-Type': 'application/json', ...extra.headers },
     body: JSON.stringify({ role, password, remember: extra.remember })
   });
-  const memberResponse = await login('member', staffPassword);
-  assert.equal(memberResponse.status, 200);
-  const persistentCookie = memberResponse.headers.get('Set-Cookie');
+  assert.equal((await login('member', adminPassword)).status, 400);
+  const persistent = await login('admin', adminPassword);
+  assert.equal(persistent.status, 200);
+  const persistentCookie = persistent.headers.get('Set-Cookie');
   assert.match(persistentCookie, /Secure; HttpOnly; SameSite=Strict; Max-Age=2592000/);
-  const member = { Cookie: persistentCookie.split(';')[0] };
+  const remembered = { Cookie: persistentCookie.split(';')[0] };
   const adminResponse = await login('admin', adminPassword, { remember: false });
   assert.equal(adminResponse.status, 200);
   assert.doesNotMatch(adminResponse.headers.get('Set-Cookie'), /Max-Age/);
   const admin = { Cookie: adminResponse.headers.get('Set-Cookie').split(';')[0], Origin: 'https://welders.test' };
-  const denied = await call('/api/catalog');
-  assert.equal(denied.status, 401);
-  assert.equal(denied.headers.get('Cache-Control'), 'private, no-store');
-  assert.equal((await call('/api/catalog', { method: 'PUT', headers: { ...member, Origin: admin.Origin } })).status, 403);
-  assert.equal((await call('/api/logout', { method: 'POST', headers: { ...member, Origin: 'https://other.test' } })).status, 403);
-  const empty = await call('/api/catalog', { headers: member });
+  const publicCatalog = await call('/api/catalog');
+  assert.equal(publicCatalog.status, 200);
+  assert.equal(publicCatalog.headers.get('Cache-Control'), 'private, no-store');
+  assert.equal((await call('/api/catalog', { method: 'PUT', headers: { Origin: admin.Origin } })).status, 401);
+  assert.equal((await call('/api/logout', { method: 'POST', headers: { ...remembered, Origin: 'https://other.test' } })).status, 403);
+  const empty = await call('/api/catalog');
   assert.deepEqual(await empty.json(), []);
   const key = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa/TEST1 - Test Welder.png';
   const path = '/api/signature/' + encodeURIComponent(key);
-  assert.equal((await call(path)).status, 401);
+  assert.equal((await call(path)).status, 404);
   const imageHeader = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/FioAAAAASUVORK5CYII=', 'base64');
+  assert.equal((await call(path, { method: 'PUT', headers: { Origin: admin.Origin }, body: imageHeader })).status, 401);
   const png = Buffer.concat([imageHeader, randomBytes(1_850_000)]);
   assert.equal((await call(path, { method: 'PUT', headers: admin, body: png })).status, 204);
   assert.equal((await call(path, { method: 'PUT', headers: admin, body: png })).status, 409);
+  assert.equal((await call(path)).status, 404);
   const publish = (keys = [key], version = empty.headers.get('ETag')) => call('/api/catalog', { method: 'PUT', headers: { ...admin, 'If-Match': version }, body: JSON.stringify(keys) });
   assert.equal((await publish([key + '.png'])).status, 409);
   assert.equal((await publish()).status, 204);
   assert.equal((await publish()).status, 409);
-  assert.deepEqual(await (await call('/api/catalog', { headers: member })).json(), [key]);
-  assert.deepEqual(Buffer.from(await (await call(path, { headers: member })).arrayBuffer()), png);
-  const current = await call('/api/catalog', { headers: member });
+  assert.deepEqual(await (await call('/api/catalog')).json(), [key]);
+  assert.deepEqual(Buffer.from(await (await call(path)).arrayBuffer()), png);
+  const current = await call('/api/catalog');
   assert.equal((await publish([], current.headers.get('ETag'))).status, 204);
-  assert.deepEqual(await (await call('/api/catalog', { headers: member })).json(), []);
-  const renewed = await call('/api/session?renew=1', { headers: member });
+  assert.deepEqual(await (await call('/api/catalog')).json(), []);
+  assert.equal((await call(path)).status, 404);
+  const renewed = await call('/api/session?renew=1', { headers: remembered });
   assert.equal(renewed.status, 200);
   assert.match(renewed.headers.get('Set-Cookie'), /Max-Age=2592000/);
 
-  const bad = () => login('admin', staffPassword, { headers: { 'CF-Connecting-IP': '192.0.2.10' } });
+  const bad = () => login('admin', randomBytes(24).toString('hex'), { headers: { 'CF-Connecting-IP': '192.0.2.10' } });
   for (let i = 0; i < 8; i++) assert.equal((await bad()).status, 401);
   assert.equal((await bad()).status, 429);
   assert.equal((await call('/api/admin/revoke', { method: 'POST', headers: admin })).status, 204);
-  assert.equal((await call(path, { headers: member })).status, 401);
+  assert.equal((await call('/api/session', { headers: remembered })).status, 401);
   assert.equal((await call('/api/session', { headers: admin })).status, 401);
 });
 
