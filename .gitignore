@@ -1,6 +1,0 @@
-db.json
-signatures/
-.dev.vars*
-.wrangler/
-node_modules/
-wrangler.local.toml
