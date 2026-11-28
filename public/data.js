@@ -30,11 +30,11 @@ function parseSignature(key) {
   return { stamp: match[1].toUpperCase(), fio: match[2].trim(), key };
 }
 
-function excelRows(records) {
+function excelRows(records, headers = ['Клеймо', 'ФИО']) {
   const cell = value => {
     const text = value.replace(/[\t\r\n]/g, ' ');
     return /^\s*[=+\-@]/.test(text) ? "'" + text : text;
   };
-  return [ ['Клеймо', 'ФИО'], ...records.map(record => [record.stamp, record.fio]) ]
+  return [ headers, ...records.map(record => [record.stamp, record.fio]) ]
     .map(row => row.map(cell).join('\t')).join('\r\n');
 }

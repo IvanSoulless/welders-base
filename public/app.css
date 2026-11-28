@@ -371,3 +371,5 @@
 
 [hidden]{display:none!important}
 #access,#account{padding:1rem} .welder-card{animation:appear .18s ease-out}@keyframes appear{from{opacity:0;transform:translateY(5px)}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+#language{display:flex;justify-content:flex-end;padding:12px 16px 0}

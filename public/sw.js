@@ -1,5 +1,5 @@
 
-const cacheName = 'welders-v2-shell-1';
+const cacheName = 'welders-v2-shell-2';
 const shell = ['/', '/app.css', '/app.js', '/data.js', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', event => {

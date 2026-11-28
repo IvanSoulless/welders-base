@@ -1,6 +1,36 @@
 
   const I18N = {
     ru: {
+      role: "Роль",
+      member: "Сотрудник",
+      admin: "Администратор",
+      password: "Пароль",
+      remember: "Запомнить меня",
+      signIn: "Войти",
+      signOut: "Выйти",
+      refresh: "Обновить общую базу",
+      excel: "Копировать в Excel",
+      publish: "Опубликовать импорт",
+      revoke: "Завершить все сеансы",
+      signature: "Подпись",
+      stampColumn: "Клеймо",
+      nameColumn: "ФИО",
+      expired: "Сеанс завершён. Войдите снова.",
+      syncError: "Не удалось обновить общую базу. Повторите попытку.",
+      unavailable: "Сервис недоступен.",
+      offline: "Требуется подключение к сети.",
+      rateLimited: "Слишком много попыток. Подождите минуту.",
+      badPassword: "Неверный пароль.",
+      logoutError: "Не удалось завершить сеанс.",
+      logoutOffline: "Не удалось завершить сеанс. Проверьте подключение.",
+      confirmRevoke: "Завершить сеансы всех пользователей?",
+      invalidFile: "Требуется PNG до 1,9 МБ с именем «клеймо - ФИО.png».",
+      invalidPng: "Недопустимое изображение PNG.",
+      confirmPublish: "Опубликовать локальные изменения в общей базе?",
+      publishConflict: "Общая база изменилась. Обновите её и повторите публикацию.",
+      publishError: "Не удалось опубликовать импорт.",
+      cropLimit: "Обрезанная подпись превышает 1,9 МБ.",
+      clipboardError: "Буфер обмена недоступен.",
       title: 'База клейм сварщиков',
       uploadBtn: '📁 Добавить свою папку',
       removeBg: 'Вырезать белый фон (прозрачный PNG)',
@@ -37,6 +67,36 @@
       toastCropped: 'Обрезка сохранена!'
     },
     en: {
+      role: "Role",
+      member: "Staff",
+      admin: "Administrator",
+      password: "Password",
+      remember: "Remember me",
+      signIn: "Sign in",
+      signOut: "Sign out",
+      refresh: "Refresh shared database",
+      excel: "Copy to Excel",
+      publish: "Publish import",
+      revoke: "End all sessions",
+      signature: "Signature",
+      stampColumn: "Stamp",
+      nameColumn: "Full name",
+      expired: "Session ended. Sign in again.",
+      syncError: "Could not refresh the shared database. Try again.",
+      unavailable: "Service unavailable.",
+      offline: "An internet connection is required.",
+      rateLimited: "Too many attempts. Wait a minute.",
+      badPassword: "Incorrect password.",
+      logoutError: "Could not end the session.",
+      logoutOffline: "Could not end the session. Check your connection.",
+      confirmRevoke: "End all user sessions?",
+      invalidFile: "Use a PNG up to 1.9 MB named “Stamp - Full Name.png”.",
+      invalidPng: "Invalid PNG image.",
+      confirmPublish: "Publish local changes to the shared database?",
+      publishConflict: "The shared database changed. Refresh it and try publishing again.",
+      publishError: "Could not publish the import.",
+      cropLimit: "The cropped signature exceeds 1.9 MB.",
+      clipboardError: "Clipboard unavailable.",
       title: 'Welder Stamp Database',
       uploadBtn: '📁 Add Custom Folder',
       removeBg: 'Remove white background (transparent PNG)',
@@ -73,6 +133,36 @@
       toastCropped: 'Crop saved!'
     },
     tr: {
+      role: "Rol",
+      member: "Çalışan",
+      admin: "Yönetici",
+      password: "Parola",
+      remember: "Beni hatırla",
+      signIn: "Giriş yap",
+      signOut: "Çıkış yap",
+      refresh: "Ortak veritabanını yenile",
+      excel: "Excel için kopyala",
+      publish: "İçe aktarılanları yayımla",
+      revoke: "Tüm oturumları sonlandır",
+      signature: "İmza",
+      stampColumn: "Damga",
+      nameColumn: "Ad soyad",
+      expired: "Oturum sona erdi. Yeniden giriş yapın.",
+      syncError: "Ortak veritabanı yenilenemedi. Tekrar deneyin.",
+      unavailable: "Hizmete ulaşılamıyor.",
+      offline: "İnternet bağlantısı gerekiyor.",
+      rateLimited: "Çok fazla deneme yapıldı. Bir dakika bekleyin.",
+      badPassword: "Parola yanlış.",
+      logoutError: "Oturum sonlandırılamadı.",
+      logoutOffline: "Oturum sonlandırılamadı. Bağlantınızı kontrol edin.",
+      confirmRevoke: "Tüm kullanıcı oturumları sonlandırılsın mı?",
+      invalidFile: "En fazla 1,9 MB boyutunda “Damga - Ad Soyad.png” adlı bir PNG kullanın.",
+      invalidPng: "Geçersiz PNG görseli.",
+      confirmPublish: "Yerel değişiklikler ortak veritabanında yayımlansın mı?",
+      publishConflict: "Ortak veritabanı değişti. Yenileyip tekrar yayımlamayı deneyin.",
+      publishError: "İçe aktarılanlar yayımlanamadı.",
+      cropLimit: "Kırpılan imza 1,9 MB sınırını aşıyor.",
+      clipboardError: "Panoya erişilemiyor.",
       title: 'Kaynakçı Damga Veritabanı',
       uploadBtn: '📁 Özel Klasör Ekle',
       removeBg: 'Beyaz arka planı kaldır (şeffaf PNG)',
@@ -114,17 +204,26 @@
   let lastStatusState = { type: 'init', count: 0, date: '' };
   let currentErrorsList = [];
 
+  const translate = key => I18N[currentLang][key];
+  let accessMessage = '';
+  let accountMessage = '';
+
   function setLanguage(lang) {
     currentLang = lang;
+    document.documentElement.lang = lang;
+    document.title = I18N[lang].title;
     localStorage.setItem('welders_lang', lang);
 
     document.querySelectorAll('.lang-btn').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.lang === lang);
+      const selected = btn.dataset.lang === lang;
+      btn.classList.toggle('active', selected);
+      btn.setAttribute('aria-pressed', selected);
     });
 
     const dict = I18N[lang];
     document.querySelectorAll('[data-i18n]').forEach(el => {
       const key = el.getAttribute('data-i18n');
+      if (key === 'signature' && el.dataset.signatureTitle) return;
       if (typeof dict[key] === 'string') el.textContent = dict[key];
     });
     document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
@@ -132,6 +231,8 @@
       if (typeof dict[key] === 'string') el.placeholder = dict[key];
     });
 
+    accessStatus(accessMessage);
+    accountStatus(accountMessage);
     updateStatusText();
     renderErrors(currentErrorsList);
     handleSearchInput();
@@ -165,10 +266,12 @@
   let lastActivity = Date.now();
   for (const event of ['pointerdown', 'keydown']) window.addEventListener(event, () => { lastActivity = Date.now(); });
   const element = id => document.getElementById(id);
-  const accountStatus = message => { element('accountStatus').textContent = message; };
+  const setStatus = (id, key) => { element(id).textContent = key ? translate(key) : ''; };
+  const accessStatus = key => { accessMessage = key; setStatus('accessStatus', key); };
+  const accountStatus = key => { accountMessage = key; setStatus('accountStatus', key); };
   const api = async (path, options) => {
     const res = await fetch(path, { ...options, cache: 'no-store' });
-    if (res.status === 401 && path !== '/api/login') lock('Сеанс завершён. Войдите снова.');
+    if (res.status === 401 && path !== '/api/login') lock('expired');
     return res;
   };
 
@@ -197,7 +300,7 @@
     element('folderInput').value = '';
     element('application').hidden = true;
     element('access').hidden = false;
-    element('accessStatus').textContent = message;
+    accessStatus(message);
   }
 
   function applyOverlay() {
@@ -231,7 +334,7 @@
       }
       accountStatus('');
     } catch {
-      if (role) accountStatus('Не удалось обновить общую базу. Повторите попытку.');
+      if (role) accountStatus('syncError');
     } finally {
       syncing = false;
       if (role && counter !== syncCounter) synchronize();
@@ -262,9 +365,9 @@
     try {
       const res = await fetch('/api/session', { cache: 'no-store' });
       if (res.ok) openAccount(await res.json());
-      else if (res.status !== 401) element('accessStatus').textContent = 'Сервис недоступен.';
+      else if (res.status !== 401) accessStatus('unavailable');
     } catch {
-      element('accessStatus').textContent = 'Требуется подключение к сети.';
+      accessStatus('offline');
     }
   });
 
@@ -278,10 +381,9 @@
       const res = await api('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: values.get('password'), role: values.get('role'), remember: values.has('remember') }) });
       if (res.ok) openAccount(await res.json());
-      else element('accessStatus').textContent = res.status === 429 ? 'Слишком много попыток. Подождите минуту.' :
-        res.status === 401 ? 'Неверный пароль.' : 'Сервис недоступен.';
+      else accessStatus(res.status === 429 ? 'rateLimited' : res.status === 401 ? 'badPassword' : 'unavailable');
     } catch {
-      element('accessStatus').textContent = 'Требуется подключение к сети.';
+      accessStatus('offline');
     } finally {
       form.elements.password.value = '';
       button.disabled = false;
@@ -292,15 +394,15 @@
     try {
       const res = await api(path, { method: 'POST' });
       if (res.ok) lock();
-      else if (role) accountStatus('Не удалось завершить сеанс.');
+      else if (role) accountStatus('logoutError');
     } catch {
-      accountStatus('Не удалось завершить сеанс. Проверьте подключение.');
+      accountStatus('logoutOffline');
     }
   }
 
   element('logout').onclick = () => endSession('/api/logout');
   element('revoke').onclick = () => {
-    if (confirm('Завершить сеансы всех пользователей?')) endSession('/api/admin/revoke');
+    if (confirm(translate('confirmRevoke'))) endSession('/api/admin/revoke');
   };
   element('refresh').onclick = synchronize;
   window.addEventListener('focus', () => { lastActivity = Date.now(); synchronize(); });
@@ -321,7 +423,7 @@
       if (file.name.startsWith('.')) continue;
       const record = parseSignature(file.name);
       if (!record || file.size > 1_900_000) {
-        errors.push(file.name + ' — требуется PNG до 1,9 МБ с именем «клеймо - ФИО.png».');
+        errors.push({ code: 'invalidFile', file: file.name });
         continue;
       }
       try {
@@ -331,7 +433,7 @@
         image.close();
         if (!valid) throw new Error();
       } catch {
-        errors.push(file.name + ' — недопустимое изображение PNG.');
+        errors.push({ code: 'invalidPng', file: file.name });
         continue;
       }
       if (records.has(record.stamp)) {
@@ -349,7 +451,7 @@
 
   element('publish').onclick = async () => {
     if (publishing || syncing || role !== 'admin' || !revisionTag || !localRecords.size) return;
-    if (!confirm('Опубликовать локальные изменения в общей базе?')) return;
+    if (!confirm(translate('confirmPublish'))) return;
     publishing = true;
     element('publish').disabled = true;
     const counter = syncCounter;
@@ -369,7 +471,7 @@
         headers: { 'Content-Type': 'application/json', 'If-Match': revisionTag },
         body: JSON.stringify([...catalog.values()]) });
       if (!published.ok) {
-        accountStatus(published.status === 409 ? 'Общая база изменилась. Обновите её и повторите публикацию.' : 'Не удалось опубликовать импорт.');
+        accountStatus(published.status === 409 ? 'publishConflict' : 'publishError');
         return;
       }
       for (const [stamp, record] of changes) if (localRecords.get(stamp) === record) localRecords.delete(stamp);
@@ -377,14 +479,15 @@
       publishing = false;
       await synchronize();
     } catch {
-      if (role) accountStatus('Не удалось опубликовать импорт.');
+      if (role) accountStatus('publishError');
     } finally {
       publishing = false;
       element('publish').disabled = false;
     }
   };
 
-  element('excel').onclick = () => copyText(excelRows(element('searchInput').value.trim() ? displayedRecords : weldersList));
+  element('excel').onclick = () => copyText(excelRows(element('searchInput').value.trim() ? displayedRecords : weldersList,
+    [translate('stampColumn'), translate('nameColumn')]));
 
 
   function enableSearch() {
@@ -406,6 +509,7 @@
       toggle.style.display = 'inline';
       toggle.textContent = dict.errToggle(currentErrorsList.length);
       list.innerHTML = currentErrorsList.map(err => {
+        if (err.code === 'invalidFile' || err.code === 'invalidPng') return '<li>' + escapeHTML(err.file + ': ' + translate(err.code)) + '</li>';
         if (typeof err === 'string') return `<li>${escapeHTML(err)}</li>`;
         if (err.code === 'notImg') return `<li>${escapeHTML(dict.errNotImg(err.file))}</li>`;
         if (err.code === 'noDash') return `<li>${escapeHTML(dict.errNoDash(err.file))}</li>`;
@@ -661,7 +765,7 @@
             </div>
           </div>
           <div class="sig-preview ${removeBg ? '' : 'solid-white'}" data-zoom="img_${idx}" data-title="${escapeHTML(w.stamp + ' — ' + w.fio)}">
-            <img id="img_${idx}" src="${dataUrl}" alt="Signature ${escapeHTML(w.stamp)}">
+            <img id="img_${idx}" src="${dataUrl}" alt="${escapeHTML(dict.signature)} ${escapeHTML(w.stamp)}">
           </div>
           <div class="card-bottom">
             <span class="hint">${removeBg ? dict.bgTransparentHint : dict.bgWhiteHint}</span>
@@ -686,7 +790,9 @@
     if (!srcImg) return;
     currentZoomImgId = imgId;
     currentZoom = 1.5;
-    document.getElementById('zoomTitle').textContent = titleText;
+    const title = document.getElementById('zoomTitle');
+    title.textContent = titleText;
+    title.dataset.signatureTitle = 'true';
     const zImg = document.getElementById('zoomImg');
     zImg.src = srcImg.src;
     const viewport = document.getElementById('zoomViewport');
@@ -810,7 +916,7 @@
       if (!newBlob || !role || counter !== syncCounter) return;
       const idx = weldersList.findIndex(item => item.stamp === stamp);
       if (idx !== -1) {
-        if (newBlob.size > 1_900_000) { showToast('Обрезанная подпись превышает 1,9 МБ.'); closeCropModal(); return; }
+        if (newBlob.size > 1_900_000) { showToast(translate('cropLimit')); closeCropModal(); return; }
         localRecords.set(stamp, { ...weldersList[idx], blob: newBlob });
         applyOverlay();
         handleSearchInput();
@@ -835,7 +941,7 @@
   }
 
   async function copyText(text) {
-    try { await navigator.clipboard.writeText(text); } catch { showToast("Clipboard unavailable"); return; }
+    try { await navigator.clipboard.writeText(text); } catch { showToast(translate('clipboardError')); return; }
     showToast(I18N[currentLang].toastCopiedText(text));
   }
 
@@ -844,7 +950,7 @@
     if (!img?.getAttribute("src")) return;
     const res = await fetch(img.src);
     const blob = await res.blob();
-    try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); } catch { showToast('Clipboard unavailable'); return; }
+    try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); } catch { showToast(translate('clipboardError')); return; }
     showToast(I18N[currentLang].toastCopiedPng);
   }
 
